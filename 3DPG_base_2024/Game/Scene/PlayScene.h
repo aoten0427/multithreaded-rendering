@@ -6,6 +6,7 @@
 #include "IScene.h"
 #include <thread>
 #include <mutex>
+#include"Game/ShaderManager.h"
 
 // 前方宣言
 class CommonResources;
@@ -21,6 +22,26 @@ class PlayScene final :
     public IScene
 {
 private:
+	static const int MAX_INSTANCE = 500;
+
+	struct PNTStaticConstantBuffer
+	{
+		DirectX::SimpleMath::Matrix World;
+		DirectX::SimpleMath::Matrix View;
+		DirectX::SimpleMath::Matrix Projection;
+		DirectX::SimpleMath::Vector4 LightDir;
+		DirectX::SimpleMath::Vector4 Emissive;
+		DirectX::SimpleMath::Vector4 Diffuse;
+		PNTStaticConstantBuffer() {
+			memset(this, 0, sizeof(PNTStaticConstantBuffer));
+		};
+	};
+
+	struct CBuff
+	{
+		DirectX::SimpleMath::Matrix mat[MAX_INSTANCE];
+	};
+
 	// 共通リソース
 	CommonResources* m_commonResources;
 
@@ -36,67 +57,12 @@ private:
 	// モデル
 	std::unique_ptr<DirectX::Model> m_model;
 
+	ShaderSet m_instanceSet;
+
+	//定数バッファ
+	Microsoft::WRL::ComPtr<ID3D11Buffer>	cBuffer;
+
 	
-	// マルチスレッドレンダリング用の構造体
-	struct RenderCommand
-	{
-		std::function<void(ID3D11DeviceContext*)> renderFunc;
-	};
-
-    struct ThreadData
-    {
-        ID3D11DeviceContext* deferredContext;
-        ID3D11CommandList* commandList;
-        std::vector<RenderCommand> commands;
-        std::unique_ptr<std::thread> thread;  // threadをユニークポインタに変更
-        std::mutex mutex;
-        std::atomic<bool> working;
-
-        // デフォルトコンストラクタを明示的に定義
-        ThreadData() : deferredContext(nullptr), commandList(nullptr), working(false) {}
-
-        // ムーブコンストラクタを定義
-        ThreadData(ThreadData&& other) noexcept
-            : deferredContext(other.deferredContext)
-            , commandList(other.commandList)
-            , commands(std::move(other.commands))
-            , thread(std::move(other.thread))
-            , working(other.working.load())
-        {
-            other.deferredContext = nullptr;
-            other.commandList = nullptr;
-        }
-
-        // コピーを禁止
-        ThreadData(const ThreadData&) = delete;
-        ThreadData& operator=(const ThreadData&) = delete;
-
-        // ムーブ代入演算子を定義
-        ThreadData& operator=(ThreadData&& other) noexcept
-        {
-            if (this != &other)
-            {
-                deferredContext = other.deferredContext;
-                commandList = other.commandList;
-                commands = std::move(other.commands);
-                thread = std::move(other.thread);
-                working = other.working.load();
-
-                other.deferredContext = nullptr;
-                other.commandList = nullptr;
-            }
-            return *this;
-        }
-    };
-
-	// マルチスレッドレンダリング用のメンバー変数
-	std::vector<ThreadData> m_threadDatas;
-	bool m_useMultithreadedRendering;
-	static const int THREAD_COUNT = 4; // スレッド数
-    std::unique_ptr<DirectX::BasicEffect> m_basicEffect;
-    Microsoft::WRL::ComPtr<ID3D11InputLayout> m_inputLayout;
-    // スレッドごとにエフェクトのコピーを持つ
-    std::vector<std::unique_ptr<DirectX::BasicEffect>> m_threadEffects;
 public:
 	PlayScene();
 	~PlayScene() override;
@@ -107,6 +73,4 @@ public:
 	void Finalize() override;
 
 	SceneID GetNextSceneID() const;
-
-    void RenderThread(int threadIndex);
 };

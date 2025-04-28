@@ -16,6 +16,22 @@
 using namespace DirectX;
 using namespace DirectX::SimpleMath;
 
+const std::vector<D3D11_INPUT_ELEMENT_DESC> INSTANCE_INPUT_LAYOUT =
+{
+	// 通常の頂点データ（スロット0）
+	{ "SV_Position", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 16, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 28, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+
+	// インスタンスデータ（スロット1）- 行列は4つのfloat4として定義
+	{ "MATRIX", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 0, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+	{ "MATRIX", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 16, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+	{ "MATRIX", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 32, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+	{ "MATRIX", 3, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 48, D3D11_INPUT_PER_INSTANCE_DATA, 1 }
+};
+
+
+
 //---------------------------------------------------------
 // コンストラクタ
 //---------------------------------------------------------
@@ -72,46 +88,25 @@ void PlayScene::Initialize(CommonResources* resources)
 	// モデルを読み込む
 	m_model = DirectX::Model::CreateFromCMO(device, L"Resources/Models/dice.cmo", *fx);
 
-	// ベーシックエフェクトを作成する
-	m_basicEffect = std::make_unique<BasicEffect>(device);
-	m_basicEffect->SetVertexColorEnabled(true);
-	m_basicEffect->SetLightingEnabled(false);
-	m_basicEffect->SetTextureEnabled(false);
+	m_instanceSet.vertexShader = ShaderManager::CreateVSShader(device, "InstanceModelVS.cso");
+	m_instanceSet.pixelShader = ShaderManager::CreatePSShader(device, "InstanceModelPS.cso");
+	m_instanceSet.inputLayout = ShaderManager::CreateInputLayout(device, INSTANCE_INPUT_LAYOUT, "InstanceModelVS.cso");
 
-	// 入力レイアウトを作成する
-	DX::ThrowIfFailed(
-		CreateInputLayoutFromEffect<VertexPositionColor>(
-			device,
-			m_basicEffect.get(),
-			m_inputLayout.ReleaseAndGetAddressOf()
-		)
-	);
+	// インスタンスバッファの作成
+	D3D11_BUFFER_DESC instanceBufferDesc = {};
+	instanceBufferDesc.Usage = D3D11_USAGE_DYNAMIC;
+	instanceBufferDesc.ByteWidth = sizeof(Matrix) * MAX_INSTANCE;
+	instanceBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER; // この部分が重要！
+	instanceBufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+	instanceBufferDesc.MiscFlags = 0;
+	instanceBufferDesc.StructureByteStride = 0;
 
-	// マルチスレッドレンダリングの初期化
-	if (m_useMultithreadedRendering)
-	{
-		for (int i = 0; i < THREAD_COUNT; i++)
-		{
-			m_threadDatas.emplace_back();
-			// 遅延コンテキストの作成
-			resources->GetDeviceResources()->GetD3DDevice()->CreateDeferredContext(0, &m_threadDatas[i].deferredContext);
-			m_threadDatas[i].commandList = nullptr;
-			m_threadDatas[i].working = false;
-		}
-
-        m_threadEffects.reserve(THREAD_COUNT);
-
-        for (int i = 0; i < THREAD_COUNT; i++)
-        {
-            // 各スレッド用のエフェクトのコピーを作成
-            m_threadEffects.emplace_back(std::make_unique<DirectX::BasicEffect>(device));
-
-            // エフェクトの初期設定をコピー
-            m_threadEffects[i]->SetLightingEnabled(true);
-            m_threadEffects[i]->SetPerPixelLighting(true);
-            // ... その他の設定 ...
-        }
+	HRESULT hr = device->CreateBuffer(&instanceBufferDesc, nullptr, &m_instanceSet.cBuffer);
+	if (FAILED(hr)) {
+		// エラー処理
 	}
+
+	cBuffer = ShaderManager::CreateConstantBuffer<PNTStaticConstantBuffer>(device);
 }
 
 //---------------------------------------------------------
@@ -130,6 +125,7 @@ void PlayScene::Update(float elapsedTime)
 //---------------------------------------------------------
 void PlayScene::Render()
 {
+	auto device = m_commonResources->GetDeviceResources()->GetD3DDevice();
 	auto context = m_commonResources->GetDeviceResources()->GetD3DDeviceContext();
 	auto states = m_commonResources->GetCommonStates();
 
@@ -144,118 +140,91 @@ void PlayScene::Render()
 
 	Matrix mat = Matrix::Identity;
 
-   /* int count = 2000;
-
-    for (int i = 0; i < count; i++)
-    {
-        m_model->Draw(context, *states, mat, view, m_projection, false, [&]() {
-    		
-    	});
-    }*/
+  
 	//// モデルを描画する
 	//m_model->Draw(context, *states, mat, view, m_projection, false, [&]() {
 	//		
 	//	});
 
 
-	// デバッグ情報を「DebugString」で表示する
-	auto debugString = m_commonResources->GetDebugString();
-	debugString->AddString("Play Scene");
+	D3D11_MAPPED_SUBRESOURCE mappedResource;
+	// 定数バッファをマップする
+	context->Map(m_instanceSet.cBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
+
+	CBuff* cb = static_cast<CBuff*>(mappedResource.pData);
+	for (int i = 0; i < MAX_INSTANCE; i++)
+	{
+		cb->mat[i] = Matrix::Identity;
+	}
+
+	context->Unmap(m_instanceSet.cBuffer.Get(), 0);
+
+	
+
+	for (auto& meshes : m_model->meshes)
+	{
+		for (auto& mesh : meshes->meshParts)
+		{
+			ID3D11Buffer* pBuf[2] = { mesh->vertexBuffer.Get(), m_instanceSet.cBuffer.Get() };
+
+			// ここが問題 - strideとoffsetは配列である必要がある
+			UINT strides[2] = { mesh->vertexStride, sizeof(Matrix) }; // 正しい頂点ストライドとインスタンスデータサイズ
+			UINT offsets[2] = { 0, 0 };
+
+			context->IASetVertexBuffers(0, 2, pBuf, strides, offsets);
+			//インデックスバッファのセット
+			context->IASetIndexBuffer(mesh->indexBuffer.Get(), DXGI_FORMAT_R16_UINT, 0);
+			//描画方法（3角形）
+			context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+			//シェーダの設定
+			context->VSSetShader(m_instanceSet.vertexShader.Get(), nullptr, 0);
+			context->PSSetShader(m_instanceSet.pixelShader.Get(), nullptr, 0);
+			//インプットレイアウトの設定
+			context->IASetInputLayout(m_instanceSet.inputLayout.Get());
+
+			//ブレンドステート
+		//透明処理しない
+			context->OMSetBlendState(states->Opaque(), nullptr, 0xffffffff);
+			//デプスステンシルステート
+			context->OMSetDepthStencilState(states->DepthDefault(), 0);
+			//テクスチャとサンプラーの設定
+			ID3D11ShaderResourceView* pNull[1] = { 0 };
+			/*context->PSSetShaderResources(0, 1, m_TextureResource->GetShaderResourceView().GetAddressOf());*/
+			ID3D11SamplerState* pSampler = states->LinearClamp();
+			context->PSSetSamplers(0, 1, &pSampler);
+			//ラスタライザステート（表面描画）
+			context->RSSetState(states->CullNone());
+
+			//コンスタントバッファの準備
+			PNTStaticConstantBuffer sb;
+			sb.World = Matrix::Identity;	//ワールド行列はダミー
+			sb.View = view;
+			sb.Projection = m_projection;
+			//ライティング
+			Vector4 LightDir(0.5f, -1.0f, 0.5f, 0.0f);
+			LightDir.Normalize();
+			sb.LightDir = LightDir;
+			//ディフューズ
+			sb.Diffuse = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+			//エミッシブ加算。
+			sb.Emissive = Vector4(0.4f, 0.4f, 0.4f, 0);
+			//コンスタントバッファの更新
+			context->UpdateSubresource(cBuffer.Get(), 0, nullptr, &sb, 0, 0);
+			//コンスタントバッファの設定
+			ID3D11Buffer* pConstantBuffer = cBuffer.Get();
+			ID3D11Buffer* pNullConstantBuffer = nullptr;
+			//頂点シェーダに渡す
+			context->VSSetConstantBuffers(0, 1, &pConstantBuffer);
+			//ピクセルシェーダに渡す
+			context->PSSetConstantBuffers(0, 1, &pConstantBuffer);
+			//描画
+			context->DrawIndexedInstanced(mesh->indexCount, MAX_INSTANCE, 0, 0, 0);
+		}
+	}
 
 
-    if (m_useMultithreadedRendering)
-    {
-        // モデルの総数を取得
-		size_t modelCount = 2000;
-        size_t modelsPerThread = modelCount / THREAD_COUNT;
-
-        // レンダリングタスクを分割
-        for (int i = 0; i < THREAD_COUNT; i++)
-        {
-            m_threadDatas[i].commands.clear();
-
-            // スレッドごとのエフェクトを使用
-            auto& threadEffect = m_threadEffects[i];
-
-            // エフェクトにカメラ行列を設定
-            threadEffect->SetView(view);
-            threadEffect->SetProjection(m_projection);
-
-            // このスレッドで処理するモデルの範囲を決定
-            size_t startIndex = i * modelsPerThread;
-            size_t endIndex = (i == THREAD_COUNT - 1) ? modelCount : (i + 1) * modelsPerThread;
-
-            // 各モデルの描画コマンドを追加
-            for (size_t j = startIndex; j < endIndex; j++)
-            {
-                // ワールド行列などの計算
-				DirectX::SimpleMath::Matrix world = Matrix::Identity;
-               /* world = Matrix::CreateTranslation(Vector3(j, 0, 0));*/
-
-                // スレッドローカルなインデックスを使用
-                int threadEffectIndex = i;
-
-                m_threadDatas[i].commands.push_back(RenderCommand{
-                    [&](ID3D11DeviceContext* ctx) {
-                        // このスレッド専用のエフェクトを使用
-                        auto& effect = m_threadEffects[threadEffectIndex];
-
-                        //// 入力レイアウトの設定
-                        //ctx->IASetInputLayout(m_states->inputLayout.Get());
-
-                        //// ワールド行列を設定
-                        //effect->SetWorld(world);
-                        //effect->Apply(ctx);
-
-                        // モデルの描画
-                        m_model->Draw(ctx, *states, world, view, m_projection);
-                    }
-                    });
-            }
-
-            // スレッドを開始
-            m_threadDatas[i].working = true;
-            if (m_threadDatas[i].thread)
-            {
-                m_threadDatas[i].thread = nullptr;  // 前のスレッドをクリア
-            }
-            m_threadDatas[i].thread = std::make_unique<std::thread>(&PlayScene::RenderThread, this, i);
-        }
-
-        // 全スレッドの完了を待つ
-        for (int i = 0; i < THREAD_COUNT; i++)
-        {
-            if (m_threadDatas[i].thread && m_threadDatas[i].thread->joinable())
-            {
-                m_threadDatas[i].thread->join();
-            }
-        }
-
-        // コマンドリストを実行
-        for (int i = 0; i < THREAD_COUNT; i++)
-        {
-            if (m_threadDatas[i].commandList)
-            {
-                context->ExecuteCommandList(m_threadDatas[i].commandList, FALSE);
-                m_threadDatas[i].commandList->Release();
-                m_threadDatas[i].commandList = nullptr;
-            }
-        }
-    }
-    else
-    {
-        //// シングルスレッドレンダリング（既存の処理）
-        //for (size_t i = 0; i < m_models.size(); i++)
-        //{
-        //    DirectX::SimpleMath::Matrix world = CalculateWorldMatrix(i);
-
-        //    context->IASetInputLayout(m_states->inputLayout.Get());
-        //    m_effect->SetWorld(world);
-        //    m_effect->Apply(context);
-
-        //    m_models[i]->Draw(context, *m_states, world, m_view, m_projection);
-        //}
-    }
+	
 }
 
 //---------------------------------------------------------
@@ -263,23 +232,7 @@ void PlayScene::Render()
 //---------------------------------------------------------
 void PlayScene::Finalize()
 {
-    if (m_useMultithreadedRendering)
-    {
-        for (auto& threadData : m_threadDatas)
-        {
-            if (threadData.deferredContext)
-            {
-                threadData.deferredContext->Release();
-                threadData.deferredContext = nullptr;
-            }
-            if (threadData.commandList)
-            {
-                threadData.commandList->Release();
-                threadData.commandList = nullptr;
-            }
-        }
-        m_threadDatas.clear();
-    }
+  
 }
 
 //---------------------------------------------------------
@@ -297,35 +250,3 @@ IScene::SceneID PlayScene::GetNextSceneID() const
 	return IScene::SceneID::NONE;
 }
 
-void PlayScene::RenderThread(int threadIndex)
-{
-    ThreadData& threadData = m_threadDatas[threadIndex];
-    ID3D11DeviceContext* context = threadData.deferredContext;
-
-    // レンダーターゲットとビューポートの設定を追加
-    auto resources = m_commonResources;
-    auto deviceResources = resources->GetDeviceResources();
-
-    // レンダーターゲットとデプスステンシルビューの設定
-    ID3D11RenderTargetView* renderTargets[1] = { deviceResources->GetRenderTargetView() };
-    context->OMSetRenderTargets(1, renderTargets, deviceResources->GetDepthStencilView());
-
-    // ビューポートの設定
-    auto viewport = deviceResources->GetScreenViewport();
-    context->RSSetViewports(1, &viewport);
-
-    // コマンドを実行
-    for (const auto& command : threadData.commands)
-    {
-        command.renderFunc(context);
-    }
-
-    // コマンドリストを作成
-    HRESULT hr = threadData.deferredContext->FinishCommandList(FALSE, &threadData.commandList);
-    if (FAILED(hr)) {
-        // エラーログを出力
-        OutputDebugStringW(L"Failed to create command list\n");
-    }
-
-    threadData.working = false;
-}
