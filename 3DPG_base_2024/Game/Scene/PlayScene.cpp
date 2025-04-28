@@ -18,16 +18,13 @@ using namespace DirectX::SimpleMath;
 
 const std::vector<D3D11_INPUT_ELEMENT_DESC> INSTANCE_INPUT_LAYOUT =
 {
-	// 通常の頂点データ（スロット0）
-	{ "Position", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	 { "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 	{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 16, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 	{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 28, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-
-	// インスタンスデータ（スロット1）- 行列は4つのfloat4として定義
-	{ "MATRIX", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 0, D3D11_INPUT_PER_INSTANCE_DATA, 0 },
-	{ "MATRIX", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 16, D3D11_INPUT_PER_INSTANCE_DATA, 0 },
-	{ "MATRIX", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 32, D3D11_INPUT_PER_INSTANCE_DATA, 0 },
-	{ "MATRIX", 3, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 48, D3D11_INPUT_PER_INSTANCE_DATA, 0 }
+	{ "MATRIX", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 0, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+	{ "MATRIX", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 16, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+	{ "MATRIX", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 32, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+	{ "MATRIX", 3, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 48, D3D11_INPUT_PER_INSTANCE_DATA, 1 }
 };
 
 
@@ -80,13 +77,24 @@ void PlayScene::Initialize(CommonResources* resources)
 		0.1f, 100.0f
 	);
 
+	// 画像の作成
+	
+	DX::ThrowIfFailed(
+		DirectX::CreateWICTextureFromFile(
+			device,
+			L"Resources/Textures/TridentLogo.png",
+			nullptr,
+			m_tex.ReleaseAndGetAddressOf(),
+			0
+		)
+	);
 
 	// モデルを読み込む準備
 	std::unique_ptr<DirectX::EffectFactory> fx = std::make_unique<DirectX::EffectFactory>(device);
 	fx->SetDirectory(L"Resources/Models");
 
 	// モデルを読み込む
-	m_model = DirectX::Model::CreateFromCMO(device, L"Resources/Models/dice.cmo", *fx);
+	m_model = DirectX::Model::CreateFromCMO(device, L"Resources/Models/box.cmo", *fx);
 
 	m_instanceSet.vertexShader = ShaderManager::CreateVSShader(device, "InstanceModelVS.cso");
 	m_instanceSet.pixelShader = ShaderManager::CreatePSShader(device, "InstanceModelPS.cso");
@@ -140,7 +148,11 @@ void PlayScene::Render()
 
 	Matrix mat = Matrix::Identity;
 
-  
+	/*for (int i = 0; i < 5000; i++)
+	{
+		m_model->Draw(context, *states, mat, view, m_projection);
+	}
+	return;*/
 	//// モデルを描画する
 	/*m_model->Draw(context, *states, mat, view, m_projection, false, [&]() {
 			
@@ -154,16 +166,10 @@ void PlayScene::Render()
 	CBuff* cb = static_cast<CBuff*>(mappedResource.pData);
 	for (int i = 0; i < MAX_INSTANCE; i++)
 	{
-		// インスタンスごとに異なる位置を設定
-		float x = (i % 10) * 2.0f - 10.0f;
-		float y = ((i / 10) % 10) * 2.0f;
-		float z = (i / 100) * 2.0f - 10.0f;
-
-		cb->mat[i] = Matrix::CreateTranslation(x, y, z);
+		cb->mat[i] = XMMatrixTranspose(Matrix::CreateTranslation(Vector3(i, 0, 0)));
 	}
 
 	context->Unmap(m_instanceSet.cBuffer.Get(), 0);
-
 	
 
 	for (auto& meshes : m_model->meshes)
@@ -172,8 +178,7 @@ void PlayScene::Render()
 		{
 			ID3D11Buffer* pBuf[2] = { mesh->vertexBuffer.Get(), m_instanceSet.cBuffer.Get() };
 
-			// ここが問題 - strideとoffsetは配列である必要がある
-			UINT strides[2] = { mesh->vertexStride, sizeof(Matrix) }; // 正しい頂点ストライドとインスタンスデータサイズ
+			UINT strides[2] = { mesh->vertexStride, sizeof(Matrix) };
 			UINT offsets[2] = { 0, 0 };
 
 			context->IASetVertexBuffers(0, 2, pBuf, strides, offsets);
@@ -195,7 +200,7 @@ void PlayScene::Render()
 			context->OMSetDepthStencilState(states->DepthDefault(), 0);
 			//テクスチャとサンプラーの設定
 			ID3D11ShaderResourceView* pNull[1] = { 0 };
-			/*context->PSSetShaderResources(0, 1, m_TextureResource->GetShaderResourceView().GetAddressOf());*/
+			context->PSSetShaderResources(0, 1, m_tex.GetAddressOf());
 			ID3D11SamplerState* pSampler = states->LinearClamp();
 			context->PSSetSamplers(0, 1, &pSampler);
 			//ラスタライザステート（表面描画）
@@ -203,9 +208,9 @@ void PlayScene::Render()
 
 			//コンスタントバッファの準備
 			PNTStaticConstantBuffer sb;
-			sb.World = Matrix::Identity;	//ワールド行列はダミー
-			sb.View = view;
-			sb.Projection = m_projection;
+			sb.World = Matrix::Identity;
+			sb.View = view.Transpose();
+			sb.Projection = m_projection.Transpose();
 			//ライティング
 			Vector4 LightDir(0.5f, -1.0f, 0.5f, 0.0f);
 			LightDir.Normalize();
@@ -254,4 +259,6 @@ IScene::SceneID PlayScene::GetNextSceneID() const
 	// シーン変更がない場合
 	return IScene::SceneID::NONE;
 }
+
+
 

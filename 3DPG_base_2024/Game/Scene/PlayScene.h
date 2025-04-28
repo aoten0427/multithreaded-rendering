@@ -22,7 +22,7 @@ class PlayScene final :
     public IScene
 {
 private:
-	static const int MAX_INSTANCE = 500;
+	static const int MAX_INSTANCE = 1;
 
 	struct PNTStaticConstantBuffer
 	{
@@ -62,7 +62,7 @@ private:
 	//定数バッファ
 	Microsoft::WRL::ComPtr<ID3D11Buffer>	cBuffer;
 
-	
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_tex;
 public:
 	PlayScene();
 	~PlayScene() override;

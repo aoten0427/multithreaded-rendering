@@ -22,6 +22,6 @@ float4 main(PSPNTInput input) : SV_TARGET
     Light.a = Diffuse.a;
 	//テクスチャを設定
     Light = g_texture.Sample(g_sampler, input.tex) * Light;
-    return float4(1, 1, 1, 1);
+    return Light;
 
 }
