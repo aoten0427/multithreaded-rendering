@@ -19,15 +19,15 @@ using namespace DirectX::SimpleMath;
 const std::vector<D3D11_INPUT_ELEMENT_DESC> INSTANCE_INPUT_LAYOUT =
 {
 	// 通常の頂点データ（スロット0）
-	{ "SV_Position", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	{ "Position", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 	{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 16, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 	{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 28, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 
 	// インスタンスデータ（スロット1）- 行列は4つのfloat4として定義
-	{ "MATRIX", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 0, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
-	{ "MATRIX", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 16, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
-	{ "MATRIX", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 32, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
-	{ "MATRIX", 3, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 48, D3D11_INPUT_PER_INSTANCE_DATA, 1 }
+	{ "MATRIX", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 0, D3D11_INPUT_PER_INSTANCE_DATA, 0 },
+	{ "MATRIX", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 16, D3D11_INPUT_PER_INSTANCE_DATA, 0 },
+	{ "MATRIX", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 32, D3D11_INPUT_PER_INSTANCE_DATA, 0 },
+	{ "MATRIX", 3, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 48, D3D11_INPUT_PER_INSTANCE_DATA, 0 }
 };
 
 
@@ -142,9 +142,9 @@ void PlayScene::Render()
 
   
 	//// モデルを描画する
-	//m_model->Draw(context, *states, mat, view, m_projection, false, [&]() {
-	//		
-	//	});
+	/*m_model->Draw(context, *states, mat, view, m_projection, false, [&]() {
+			
+		});*/
 
 
 	D3D11_MAPPED_SUBRESOURCE mappedResource;
@@ -154,7 +154,12 @@ void PlayScene::Render()
 	CBuff* cb = static_cast<CBuff*>(mappedResource.pData);
 	for (int i = 0; i < MAX_INSTANCE; i++)
 	{
-		cb->mat[i] = Matrix::Identity;
+		// インスタンスごとに異なる位置を設定
+		float x = (i % 10) * 2.0f - 10.0f;
+		float y = ((i / 10) % 10) * 2.0f;
+		float z = (i / 100) * 2.0f - 10.0f;
+
+		cb->mat[i] = Matrix::CreateTranslation(x, y, z);
 	}
 
 	context->Unmap(m_instanceSet.cBuffer.Get(), 0);
