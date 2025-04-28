@@ -95,6 +95,8 @@ private:
 	static const int THREAD_COUNT = 4; // スレッド数
     std::unique_ptr<DirectX::BasicEffect> m_basicEffect;
     Microsoft::WRL::ComPtr<ID3D11InputLayout> m_inputLayout;
+    // スレッドごとにエフェクトのコピーを持つ
+    std::vector<std::unique_ptr<DirectX::BasicEffect>> m_threadEffects;
 public:
 	PlayScene();
 	~PlayScene() override;

@@ -98,6 +98,19 @@ void PlayScene::Initialize(CommonResources* resources)
 			m_threadDatas[i].commandList = nullptr;
 			m_threadDatas[i].working = false;
 		}
+
+        m_threadEffects.reserve(THREAD_COUNT);
+
+        for (int i = 0; i < THREAD_COUNT; i++)
+        {
+            // 各スレッド用のエフェクトのコピーを作成
+            m_threadEffects.emplace_back(std::make_unique<DirectX::BasicEffect>(device));
+
+            // エフェクトの初期設定をコピー
+            m_threadEffects[i]->SetLightingEnabled(true);
+            m_threadEffects[i]->SetPerPixelLighting(true);
+            // ... その他の設定 ...
+        }
 	}
 }
 
@@ -131,6 +144,14 @@ void PlayScene::Render()
 
 	Matrix mat = Matrix::Identity;
 
+   /* int count = 2000;
+
+    for (int i = 0; i < count; i++)
+    {
+        m_model->Draw(context, *states, mat, view, m_projection, false, [&]() {
+    		
+    	});
+    }*/
 	//// モデルを描画する
 	//m_model->Draw(context, *states, mat, view, m_projection, false, [&]() {
 	//		
@@ -145,13 +166,20 @@ void PlayScene::Render()
     if (m_useMultithreadedRendering)
     {
         // モデルの総数を取得
-		size_t modelCount = 10;
+		size_t modelCount = 2000;
         size_t modelsPerThread = modelCount / THREAD_COUNT;
 
         // レンダリングタスクを分割
         for (int i = 0; i < THREAD_COUNT; i++)
         {
             m_threadDatas[i].commands.clear();
+
+            // スレッドごとのエフェクトを使用
+            auto& threadEffect = m_threadEffects[i];
+
+            // エフェクトにカメラ行列を設定
+            threadEffect->SetView(view);
+            threadEffect->SetProjection(m_projection);
 
             // このスレッドで処理するモデルの範囲を決定
             size_t startIndex = i * modelsPerThread;
@@ -162,13 +190,25 @@ void PlayScene::Render()
             {
                 // ワールド行列などの計算
 				DirectX::SimpleMath::Matrix world = Matrix::Identity;
+               /* world = Matrix::CreateTranslation(Vector3(j, 0, 0));*/
 
-                /*m_model->Draw(context, *states, world, view, m_projection);*/
-                //// 描画コマンドをラムダ式でキャプチャ
+                // スレッドローカルなインデックスを使用
+                int threadEffectIndex = i;
+
                 m_threadDatas[i].commands.push_back(RenderCommand{
                     [&](ID3D11DeviceContext* ctx) {
+                        // このスレッド専用のエフェクトを使用
+                        auto& effect = m_threadEffects[threadEffectIndex];
+
+                        //// 入力レイアウトの設定
+                        //ctx->IASetInputLayout(m_states->inputLayout.Get());
+
+                        //// ワールド行列を設定
+                        //effect->SetWorld(world);
+                        //effect->Apply(ctx);
+
                         // モデルの描画
-                        m_model->Draw(ctx, *states, world,view, m_projection);
+                        m_model->Draw(ctx, *states, world, view, m_projection);
                     }
                     });
             }
@@ -223,7 +263,23 @@ void PlayScene::Render()
 //---------------------------------------------------------
 void PlayScene::Finalize()
 {
-	// do nothing.
+    if (m_useMultithreadedRendering)
+    {
+        for (auto& threadData : m_threadDatas)
+        {
+            if (threadData.deferredContext)
+            {
+                threadData.deferredContext->Release();
+                threadData.deferredContext = nullptr;
+            }
+            if (threadData.commandList)
+            {
+                threadData.commandList->Release();
+                threadData.commandList = nullptr;
+            }
+        }
+        m_threadDatas.clear();
+    }
 }
 
 //---------------------------------------------------------
@@ -246,13 +302,30 @@ void PlayScene::RenderThread(int threadIndex)
     ThreadData& threadData = m_threadDatas[threadIndex];
     ID3D11DeviceContext* context = threadData.deferredContext;
 
-    // このスレッドに割り当てられたコマンドを実行
+    // レンダーターゲットとビューポートの設定を追加
+    auto resources = m_commonResources;
+    auto deviceResources = resources->GetDeviceResources();
+
+    // レンダーターゲットとデプスステンシルビューの設定
+    ID3D11RenderTargetView* renderTargets[1] = { deviceResources->GetRenderTargetView() };
+    context->OMSetRenderTargets(1, renderTargets, deviceResources->GetDepthStencilView());
+
+    // ビューポートの設定
+    auto viewport = deviceResources->GetScreenViewport();
+    context->RSSetViewports(1, &viewport);
+
+    // コマンドを実行
     for (const auto& command : threadData.commands)
     {
         command.renderFunc(context);
     }
 
     // コマンドリストを作成
-    threadData.deferredContext->FinishCommandList(FALSE, &threadData.commandList);
+    HRESULT hr = threadData.deferredContext->FinishCommandList(FALSE, &threadData.commandList);
+    if (FAILED(hr)) {
+        // エラーログを出力
+        OutputDebugStringW(L"Failed to create command list\n");
+    }
+
     threadData.working = false;
 }
