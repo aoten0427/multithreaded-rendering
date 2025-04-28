@@ -18,9 +18,11 @@ using namespace DirectX::SimpleMath;
 
 const std::vector<D3D11_INPUT_ELEMENT_DESC> INSTANCE_INPUT_LAYOUT =
 {
-	 { "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-	{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 16, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-	{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 28, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	{ "NORMAL",   0, DXGI_FORMAT_R32G32B32_FLOAT,    0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	{ "TANGENT",  0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	{ "COLOR",    0, DXGI_FORMAT_R8G8B8A8_UNORM,     0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 	{ "MATRIX", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 0, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
 	{ "MATRIX", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 16, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
 	{ "MATRIX", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 32, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
@@ -74,7 +76,7 @@ void PlayScene::Initialize(CommonResources* resources)
 	m_projection = SimpleMath::Matrix::CreatePerspectiveFieldOfView(
 		XMConvertToRadians(45.0f),
 		static_cast<float>(rect.right) / static_cast<float>(rect.bottom),
-		0.1f, 100.0f
+		0.1f, 1000.0f
 	);
 
 	// 画像の作成
@@ -82,7 +84,7 @@ void PlayScene::Initialize(CommonResources* resources)
 	DX::ThrowIfFailed(
 		DirectX::CreateWICTextureFromFile(
 			device,
-			L"Resources/Textures/TridentLogo.png",
+			L"Resources/Textures/Box.png",
 			nullptr,
 			m_tex.ReleaseAndGetAddressOf(),
 			0
@@ -147,16 +149,33 @@ void PlayScene::Render()
 	//Y軸で90度回転
 
 	Matrix mat = Matrix::Identity;
+	// グリッドの大きさを計算（正方形に近い形に配置）
+	int gridSize = static_cast<int>(ceil(sqrt(static_cast<float>(MAX_INSTANCE))));
+	// モデル間の距離
+	float spacing = 2.0f; // 適切な距離に調整してください
+	// グリッドの開始位置（中央に配置するためにオフセット）
+	float startX = -((gridSize - 1) * spacing) / 2.0f;
+	float startZ = -((gridSize - 1) * spacing) / 2.0f;
 
-	/*for (int i = 0; i < 5000; i++)
+
+	for (int i = 0; i < MAX_INSTANCE; i++)
 	{
+		// グリッド内の位置を計算
+		int row = i / gridSize;
+		int col = i % gridSize;
+
+		// XZ平面上の位置を計算
+		float x = startX + col * spacing;
+		float z = startZ + row * spacing;
+
+		// Y軸は0（平面上）
+		float y = 0.0f;
+
+		// 各インスタンスのワールド行列を設定
+		mat = (Matrix::CreateTranslation(Vector3(x, y, z)));
 		m_model->Draw(context, *states, mat, view, m_projection);
 	}
-	return;*/
-	//// モデルを描画する
-	/*m_model->Draw(context, *states, mat, view, m_projection, false, [&]() {
-			
-		});*/
+	return;
 
 
 	D3D11_MAPPED_SUBRESOURCE mappedResource;
@@ -164,9 +183,23 @@ void PlayScene::Render()
 	context->Map(m_instanceSet.cBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
 
 	CBuff* cb = static_cast<CBuff*>(mappedResource.pData);
+
+	
 	for (int i = 0; i < MAX_INSTANCE; i++)
 	{
-		cb->mat[i] = XMMatrixTranspose(Matrix::CreateTranslation(Vector3(i, 0, 0)));
+		// グリッド内の位置を計算
+		int row = i / gridSize;
+		int col = i % gridSize;
+
+		// XZ平面上の位置を計算
+		float x = startX + col * spacing;
+		float z = startZ + row * spacing;
+
+		// Y軸は0（平面上）
+		float y = 0.0f;
+
+		// 各インスタンスのワールド行列を設定
+		cb->mat[i] = XMMatrixTranspose(Matrix::CreateTranslation(Vector3(x, y, z)));
 	}
 
 	context->Unmap(m_instanceSet.cBuffer.Get(), 0);
@@ -201,7 +234,7 @@ void PlayScene::Render()
 			//テクスチャとサンプラーの設定
 			ID3D11ShaderResourceView* pNull[1] = { 0 };
 			context->PSSetShaderResources(0, 1, m_tex.GetAddressOf());
-			ID3D11SamplerState* pSampler = states->LinearClamp();
+			ID3D11SamplerState* pSampler = states->LinearWrap();;
 			context->PSSetSamplers(0, 1, &pSampler);
 			//ラスタライザステート（表面描画）
 			context->RSSetState(states->CullNone());

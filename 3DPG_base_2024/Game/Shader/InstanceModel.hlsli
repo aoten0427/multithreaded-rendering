@@ -1,8 +1,10 @@
 struct VSPNTInstanceInput
 {
-    float4 position : POSITION;
-    float3 norm : NORMAL;
-    float2 tex : TEXCOORD0;
+    float4 Pos : POSITION;
+    float3 Normal : NORMAL;
+    float3 Tangetnt : TANGENT;
+    float4 Color : COLOR;
+    float2 Tex : TEXCOORD;
     float4x4 mat : MATRIX;
     uint InstanceId : SV_InstanceID;
 };

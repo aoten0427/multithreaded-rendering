@@ -22,7 +22,7 @@ class PlayScene final :
     public IScene
 {
 private:
-	static const int MAX_INSTANCE = 1;
+	static const int MAX_INSTANCE = 100000;
 
 	struct PNTStaticConstantBuffer
 	{
