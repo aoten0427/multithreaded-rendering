@@ -38,6 +38,12 @@
     <Filter Include="Game\Scene">
       <UniqueIdentifier>{644b32a7-7d84-4f61-a3f0-3872a592dcfb}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Game\Instancing">
+      <UniqueIdentifier>{173feb16-bdfc-434f-a284-8a4e1af844ad}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Game\Shader">
+      <UniqueIdentifier>{ead1a090-2d1f-4568-b450-1c0205048208}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
@@ -84,6 +90,15 @@
     <ClInclude Include="Game\Scene\SceneManager.h">
       <Filter>Game\Scene</Filter>
     </ClInclude>
+    <ClInclude Include="Game\Instancing\Instancing.h">
+      <Filter>Game\Instancing</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\ShaderManager.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\ReadData.h">
+      <Filter>Game</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp" />
@@ -119,6 +134,12 @@
     <ClCompile Include="Game\Scene\SceneManager.cpp">
       <Filter>Game\Scene</Filter>
     </ClCompile>
+    <ClCompile Include="Game\Instancing\Instancing.cpp">
+      <Filter>Game\Instancing</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\ShaderManager.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="resource.rc" />
@@ -135,5 +156,16 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
+    <None Include="Game\Shader\InstanceModel.hlsli">
+      <Filter>Game\Shader</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="Game\Shader\InstanceModelPS.hlsl">
+      <Filter>Game\Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Game\Shader\InstanceModelVS.hlsl">
+      <Filter>Game\Shader</Filter>
+    </FxCompile>
   </ItemGroup>
 </Project>
