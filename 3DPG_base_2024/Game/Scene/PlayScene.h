@@ -38,10 +38,12 @@ private:
 
 	// モデル
 	std::unique_ptr<DirectX::Model> m_model;
-	
-	Instancing m_instancing;
 
 	std::vector<DirectX::SimpleMath::Matrix> m_worlds;
+
+	//マルチスレッド関係
+	std::vector<ID3D11DeviceContext*> m_deferradContext;
+	std::vector<ID3D11CommandList*> m_commnds;
 public:
 	PlayScene();
 	~PlayScene() override;
@@ -52,4 +54,9 @@ public:
 	void Finalize() override;
 
 	SceneID GetNextSceneID() const;
+
+private:
+	void InitalizeMulti(int thradocunt);
+
+	void ExecuteCommaxndLists();
 };

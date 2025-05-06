@@ -9,6 +9,8 @@
 #include <vector>
 #include <string>
 
+#include"Game/CommonResources.h"
+
 namespace mylib
 {
 	class DebugString
@@ -37,7 +39,7 @@ namespace mylib
 		void AddString(const char* format, ...);
 
 		// デバッグ文字列を描画する
-		void Render(DirectX::CommonStates* states);
+		void Render(CommonResources* resouces);
 
 		// 描画する文字列の色を指定する
 		void SetColor(DirectX::FXMVECTOR color = DirectX::Colors::White)

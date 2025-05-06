@@ -17,7 +17,7 @@ using namespace DirectX;
 using namespace DirectX::SimpleMath;
 
 
-
+constexpr int THREAD_COUNT = 1;
 
 
 //---------------------------------------------------------
@@ -40,7 +40,23 @@ PlayScene::~PlayScene()
 {
 	// do nothing.
 
-	
+	for (auto& command : m_commnds)
+	{
+		if (command)
+		{
+			command->Release();
+			command = nullptr;
+		}
+	}
+
+	for (auto& context : m_deferradContext)
+	{
+		if (context)
+		{
+			context->Release();
+			context = nullptr;
+		}
+	}
 }
 
 //---------------------------------------------------------
@@ -76,13 +92,8 @@ void PlayScene::Initialize(CommonResources* resources)
 	// モデルを読み込む
 	m_model = DirectX::Model::CreateFromCMO(device, L"Resources/Models/box.cmo", *fx);
 
-	m_instancing.Initialize(device);
-	m_instancing.LoadModel("box.cmo", device);
-	m_instancing.LoadTexture("Box.png", device);
-
-	m_worlds.reserve(100000);
-
-	int SIZE = 50000;
+	
+	int SIZE = 4;
 	// グリッドの大きさを計算（正方形に近い形に配置）
 	int gridSize = static_cast<int>(ceil(sqrt(static_cast<float>(SIZE))));
 	// モデル間の距離
@@ -105,6 +116,8 @@ void PlayScene::Initialize(CommonResources* resources)
 
 		m_worlds.push_back(Matrix::CreateTranslation(Vector3(x, y, z)));
 	}
+
+	InitalizeMulti(THREAD_COUNT);
 }
 
 //---------------------------------------------------------
@@ -127,52 +140,28 @@ void PlayScene::Render()
 	auto context = m_commonResources->GetDeviceResources()->GetD3DDeviceContext();
 	auto states = m_commonResources->GetCommonStates();
 
+	auto render = m_commonResources->GetDeviceResources()->GetRenderTargetView();
+	auto viewport = m_commonResources->GetDeviceResources()->GetScreenViewport();
+	auto depth = m_commonResources->GetDeviceResources()->GetDepthStencilView();
+
+	for (auto& defcon : m_deferradContext)
+	{
+		defcon->OMSetRenderTargets(1, &render, depth);
+	/*	defcon->RSSetViewports(1, &viewport);*/
+	}
+
 	// ビュー行列を取得する
 	const Matrix& view = m_debugCamera->GetViewMatrix();
-
+	
 	
 	using namespace DirectX::SimpleMath;
-	//第一引数　回転軸
-	//第二引数　回転角度
-	//Y軸で90度回転
-
-	//Matrix mat = Matrix::Identity;
-	//
-	//int SIZE = 50000;
-	//// グリッドの大きさを計算（正方形に近い形に配置）
-	//int gridSize = static_cast<int>(ceil(sqrt(static_cast<float>(SIZE))));
-	//// モデル間の距離
-	//float spacing = 2.0f; // 適切な距離に調整してください
-	//// グリッドの開始位置（中央に配置するためにオフセット）
-	//float startX = -((gridSize - 1) * spacing) / 2.0f;
-	//float startZ = -((gridSize - 1) * spacing) / 2.0f;
-
-	//for (int i = 0; i < MAX_INSTANCE; i++)
-	//{
-	//	// グリッド内の位置を計算
-	//	int row = i / gridSize;
-	//	int col = i % gridSize;
-
-	//	// XZ平面上の位置を計算
-	//	float x = startX + col * spacing;
-	//	float z = startZ + row * spacing;
-
-	//	// Y軸は0（平面上）
-	//	float y = 0.0f;
-
-	//	// 各インスタンスのワールド行列を設定
-	//	mat = (Matrix::CreateTranslation(Vector3(x, y, z)));
-	//	m_model->Draw(context, *states, mat, view, m_projection);
-	//}
-	//return;
-
+	Matrix mat = Matrix::Identity;
 	
-	/*m_worlds.clear();*/
-	
-	m_instancing.Render(context, states, view, m_projection,m_worlds);
+	m_model->Draw(m_deferradContext[0], *states, mat, view, m_projection);
+	m_deferradContext[0]->FinishCommandList(false, &m_commnds[0]);
 	
 
-
+	ExecuteCommaxndLists();
 	
 }
 
@@ -197,6 +186,42 @@ IScene::SceneID PlayScene::GetNextSceneID() const
 
 	// シーン変更がない場合
 	return IScene::SceneID::NONE;
+}
+
+void PlayScene::InitalizeMulti(int thradocunt)
+{
+	auto device = m_commonResources->GetDeviceResources()->GetD3DDevice();
+	m_deferradContext.resize(thradocunt);
+	m_commnds.resize(thradocunt);
+	for (int i = 0; i < thradocunt; i++)
+	{
+		device->CreateDeferredContext(false, &m_deferradContext[i]);
+	}
+
+	for (int i = 0; i < thradocunt; i++)
+	{
+		
+	}
+}
+
+void PlayScene::ExecuteCommaxndLists()
+{
+	auto context = m_commonResources->GetDeviceResources()->GetD3DDeviceContext();
+
+	for (auto& command : m_commnds)
+	{
+		if (command)
+		{
+			context->ExecuteCommandList(command, false);
+			command->Release();
+			command = nullptr;
+		}
+	}
+}
+
+void PlayScene::ThradWork()
+{
+
 }
 
 

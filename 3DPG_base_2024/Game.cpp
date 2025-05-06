@@ -158,7 +158,7 @@ void Game::Render()
     m_sceneManager->Render();
 
     // デバッグ文字列を描画する
-    m_debugString->Render(m_commonStates.get());
+    m_debugString->Render(m_commonResources.get());
 
     // ★追記ココまで↑↑↑★
 

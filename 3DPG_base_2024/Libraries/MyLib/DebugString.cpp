@@ -6,6 +6,7 @@
 #include "DebugString.h"
 #include <cstdarg>
 #include <cassert>
+#include"DeviceResources.h"
 
 //---------------------------------------------------------
 // コンストラクタ
@@ -57,9 +58,18 @@ void mylib::DebugString::AddString(const char* format, ...)
 //---------------------------------------------------------
 // デバッグ文字列を描画する
 //---------------------------------------------------------
-void mylib::DebugString::Render(DirectX::CommonStates* states)
+void mylib::DebugString::Render(CommonResources* resouces)
 {
-	UNREFERENCED_PARAMETER(states);	// Beginのパラメータ設定用
+	auto context = resouces->GetDeviceResources()->GetD3DDeviceContext();
+
+	auto render = resouces->GetDeviceResources()->GetRenderTargetView();
+	auto view = resouces->GetDeviceResources()->GetScreenViewport();
+	auto depth = resouces->GetDeviceResources()->GetDepthStencilView();
+
+	context->OMSetRenderTargets(1,&render, depth);
+	context->RSSetViewports(1, &view);
+
+
 
 	m_spriteBatch->Begin();
 
