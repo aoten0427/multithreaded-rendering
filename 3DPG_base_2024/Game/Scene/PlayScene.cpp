@@ -17,7 +17,7 @@ using namespace DirectX;
 using namespace DirectX::SimpleMath;
 
 
-constexpr int THREAD_COUNT = 4;
+constexpr int THREAD_COUNT = 8;
 
 
 //---------------------------------------------------------
@@ -39,21 +39,20 @@ PlayScene::PlayScene()
 //---------------------------------------------------------
 PlayScene::~PlayScene()
 {
-	m_isRunning = false;
-
-	// do nothing.
-	for (int i = 0;i < THREAD_COUNT;i++)
+	// スレッド終了処理
 	{
+		std::lock_guard<std::mutex> lock(m_frameMutex);
+		m_isRunning = false;
+		m_frameReady = false;
+
+		for (int i = 0; i < THREAD_COUNT; i++)
 		{
-			std::lock_guard<std::mutex> lock(m_frameMutex);
 			m_isThradRunning[i] = false;
 		}
-		m_isThradRunning[i] = false;
 	}
 	m_frameStartCV.notify_all();
 
-
-		// スレッドの終了を待機
+	// スレッドの終了を待機
 	for (auto& thread : m_thrads)
 	{
 		if (thread.joinable())
@@ -62,7 +61,7 @@ PlayScene::~PlayScene()
 		}
 	}
 
-
+	// リソース解放（正しい順序で）
 	for (auto& command : m_commnds)
 	{
 		if (command)
@@ -115,8 +114,22 @@ void PlayScene::Initialize(CommonResources* resources)
 	// モデルを読み込む
 	m_model = DirectX::Model::CreateFromCMO(device, L"Resources/Models/box.cmo", *fx);
 
+	DX::ThrowIfFailed(
+		DirectX::CreateWICTextureFromFile(
+			device,
+			L"Resources/Textures/Box.png",
+			nullptr,
+			m_texture.ReleaseAndGetAddressOf(),
+			0
+		)
+	);
+
+	m_shaderSet.vertexShader = ShaderManager::CreateVSShader(device, "ModelVS.cso");
+	m_shaderSet.pixelShader = ShaderManager::CreatePSShader(device, "ModelPS.cso");
+	m_shaderSet.inputLayout = ShaderManager::CreateInputLayout(device, MODEL_INPUT_LAYOUT, "ModelVS.cso");
+	m_shaderSet.cBuffer = ShaderManager::CreateConstantBuffer<CBuff>(device);
 	
-	int SIZE = 4;
+	int SIZE = 10000;
 	// グリッドの大きさを計算（正方形に近い形に配置）
 	int gridSize = static_cast<int>(ceil(sqrt(static_cast<float>(SIZE))));
 	// モデル間の距離
@@ -124,6 +137,8 @@ void PlayScene::Initialize(CommonResources* resources)
 	// グリッドの開始位置（中央に配置するためにオフセット）
 	float startX = -((gridSize - 1) * spacing) / 2.0f;
 	float startZ = -((gridSize - 1) * spacing) / 2.0f;
+
+	/*m_models.resize(SIZE);*/
 	for (int i = 0; i < SIZE; i++)
 	{
 		// グリッド内の位置を計算
@@ -138,6 +153,13 @@ void PlayScene::Initialize(CommonResources* resources)
 		float y = 0.0f;
 
 		m_worlds.push_back(Matrix::CreateTranslation(Vector3(x, y, z)));
+
+		m_models.emplace_back(std::make_unique<Model3D>());
+		m_models[i]->Initialize(device);
+		m_models[i]->SetShader(m_shaderSet);
+		m_models[i]->LoadModel(m_model.get());
+		m_models[i]->LoadTexture(m_texture.Get());
+		m_models[i]->SetMatrix(m_worlds[i]);
 	}
 
 	InitalizeMulti(THREAD_COUNT);
@@ -181,9 +203,6 @@ void PlayScene::Render()
 	Matrix mat = Matrix::Identity;
 	
 	
-
-	/*m_model->Draw(m_deferradContext[0], *states, mat, view, m_projection);
-	m_deferradContext[0]->FinishCommandList(false, &m_commnds[0]);*/
 	// ワーカースレッドに描画を開始するよう通知
 	{
 		std::lock_guard<std::mutex> lock(m_frameMutex);
@@ -202,19 +221,15 @@ void PlayScene::Render()
 		// すべてのスレッドが完了するまで待機
 		m_frameEndCV.wait(lock, [this] { return m_threadsCompleted == THREAD_COUNT; });
 
-		// デバッグ情報表示（必要に応じて）
-		auto debug = m_commonResources->GetDebugString();
-		debug->AddString(std::to_string(nn).c_str());
-
-		{
-			std::lock_guard<std::mutex> lock(m_debugstrMutex);
-			AddDebugMessageFormat("%d", nn);
-			AddDebugMessage("描画終了");
-		}
+		ExecuteCommaxndLists();
 
 		m_frameReady = false;  // フレーム処理完了をマーク
 	}
-	/*ExecuteCommaxndLists();*/
+	
+	/*for (auto& world : m_worlds)
+	{
+		m_model->Draw(context, *states, world, view, m_projection);
+	}*/
 }
 
 //---------------------------------------------------------
@@ -243,17 +258,27 @@ IScene::SceneID PlayScene::GetNextSceneID() const
 void PlayScene::InitalizeMulti(int thradocunt)
 {
 	auto device = m_commonResources->GetDeviceResources()->GetD3DDevice();
+
+	// スレッド数に合わせてリソースを確保
 	m_deferradContext.resize(thradocunt);
-	m_commnds.resize(thradocunt);
+	m_commnds.resize(thradocunt, nullptr);  // nullptrで初期化
+	m_isThradRunning.resize(thradocunt, false);  // falseで初期化
+
+	// 遅延コンテキストを作成
 	for (int i = 0; i < thradocunt; i++)
 	{
-		device->CreateDeferredContext(false, &m_deferradContext[i]);
+		device->CreateDeferredContext(0, &m_deferradContext[i]);
 	}
 
+	// スレッド実行フラグを設定
 	m_isRunning = true;
+	m_frameReady = false;
+	m_threadsCompleted = 0;
+
+	// スレッドを起動
+	m_thrads.clear();  // 念のため初期化
 	for (int i = 0; i < thradocunt; i++)
 	{
-		m_isThradRunning.push_back(true);
 		m_thrads.emplace_back(&PlayScene::ThradWork, this, i);
 	}
 }
@@ -280,30 +305,60 @@ void PlayScene::ThradWork(int thradindex)
 		// メインスレッドからの開始シグナルを待つ
 		{
 			std::unique_lock<std::mutex> lock(m_frameMutex);
-			// このスレッドの実行フラグがtrueになるまで、または新しいフレームが準備されるまで待機
 			m_frameStartCV.wait(lock, [this, thradindex] {
-				return m_isThradRunning[thradindex] && m_frameReady;
+				return (m_isThradRunning[thradindex] && m_frameReady) || !m_isRunning;
 				});
 
-			if (!m_isRunning) break;  // スレッド終了フラグがたっていれば終了
+			if (!m_isRunning) break;
 		}
 
-		// ここでスレッド固有の処理を行う
+		// スレッドごとの担当範囲を計算
+		size_t modelCount = m_worlds.size();
+		size_t modelsPerThread = (modelCount + THREAD_COUNT - 1) / THREAD_COUNT;
+		size_t startIndex = thradindex * modelsPerThread;
+		size_t endIndex = std::min(startIndex + modelsPerThread, modelCount);
+
+		// ビュー行列はコピーして使用（スレッドごとにコピー）
+		auto states = m_commonResources->GetCommonStates();
+		Matrix view = m_debugCamera->GetViewMatrix();
+		// 描画処理（ロックする部分を最小化）
+		for (size_t i = startIndex; i < endIndex; i++)
 		{
-			std::lock_guard<std::mutex> lock(m_debugstrMutex);
-			AddDebugMessageFormat("スレッド %d: nn = %d", thradindex, nn);
+			m_models[i]->Render(m_deferradContext[thradindex], states, view, m_projection);
+			//Matrix world;
+			//Matrix view;
+			//Matrix projection;
+			//{
+			//	std::lock_guard<std::mutex> lock(m_draw);
+			//	// 変換行列はコピーして使用
+			//	world = m_worlds[i];
+			//	
+			//	projection = m_projection;
+			//}
+		
+			//m_model->Draw(m_deferradContext[thradindex], *states, world, view, m_projection);
 		}
 
-		nn++;  // カウンタをインクリメント
+		// コマンドリストを生成
+		ID3D11CommandList* command = nullptr;
+		auto hr = m_deferradContext[thradindex]->FinishCommandList(false, &command);
+		if (SUCCEEDED(hr) && command)
+		{
+			std::lock_guard<std::mutex> lock(m_commandListMutex);
+			if (m_commnds[thradindex]) {
+				m_commnds[thradindex]->Release();
+			}
+			m_commnds[thradindex] = command;
+		}
 
 		// 自分のスレッドの実行完了をマーク
 		{
 			std::lock_guard<std::mutex> lock(m_frameMutex);
-			m_isThradRunning[thradindex] = false;  // このスレッドの実行完了
+			m_isThradRunning[thradindex] = false;
 
-			// 全スレッドの完了をチェック
+			// アトミック変数はインクリメントのみロック不要
 			if (++m_threadsCompleted == THREAD_COUNT) {
-				m_frameEndCV.notify_one();  // メインスレッドに通知
+				m_frameEndCV.notify_one();
 			}
 		}
 	}

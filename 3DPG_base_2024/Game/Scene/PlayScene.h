@@ -8,6 +8,8 @@
 #include <mutex>
 #include"Game/ShaderManager.h"
 #include"Game/Instancing/Instancing.h"
+#include"Game/Model/Model3D.h"
+#include"Game/ShaderManager.h"
 
 // 前方宣言
 class CommonResources;
@@ -22,6 +24,11 @@ namespace mylib
 class PlayScene final :
     public IScene
 {
+private:
+	struct CBuff
+	{
+		DirectX::SimpleMath::Matrix mat;
+	};
 private:
 
 	// 共通リソース
@@ -38,25 +45,34 @@ private:
 
 	// モデル
 	std::unique_ptr<DirectX::Model> m_model;
+	//テクスチャ
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_texture;
+	ShaderSet m_shaderSet;
 
 	std::vector<DirectX::SimpleMath::Matrix> m_worlds;
 
 	//マルチスレッド関係
+	// マルチスレッド関係（整理・改善）
 	std::vector<ID3D11DeviceContext*> m_deferradContext;
 	std::vector<ID3D11CommandList*> m_commnds;
+	std::mutex m_commandListMutex;  // コマンドリスト操作専用ミューテックス
 
-	bool m_isRunning;
+	bool m_isRunning = false;  // 初期値を設定
 	std::vector<std::thread> m_thrads;
 
-	int nn = 0;
-	std::mutex m_nnMutex;
-
+	// 不要なミューテックスを削除（m_drawMutex）
 	std::condition_variable m_frameStartCV;
 	std::condition_variable m_frameEndCV;
 	std::mutex m_frameMutex;
+
+	// アトミック変数として適切に使用
 	std::atomic<int> m_threadsCompleted{ 0 };
 	std::vector<bool> m_isThradRunning;
-	bool m_frameReady = false;
+	std::atomic<bool> m_frameReady{ false };
+
+	std::mutex m_draw;
+
+	std::vector<std::unique_ptr<Model3D>> m_models;
 public:
 	PlayScene();
 	~PlayScene() override;

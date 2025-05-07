@@ -44,6 +44,9 @@
     <Filter Include="Game\Shader">
       <UniqueIdentifier>{ead1a090-2d1f-4568-b450-1c0205048208}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Game\Model">
+      <UniqueIdentifier>{a1669a39-4c8e-411a-b0dc-7bd78e3f4491}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
@@ -99,6 +102,9 @@
     <ClInclude Include="Game\ReadData.h">
       <Filter>Game</Filter>
     </ClInclude>
+    <ClInclude Include="Game\Model\Model3D.h">
+      <Filter>Game\Model</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp" />
@@ -140,6 +146,9 @@
     <ClCompile Include="Game\ShaderManager.cpp">
       <Filter>Game</Filter>
     </ClCompile>
+    <ClCompile Include="Game\Model\Model3D.cpp">
+      <Filter>Game\Model</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="resource.rc" />
@@ -159,6 +168,9 @@
     <None Include="Game\Shader\InstanceModel.hlsli">
       <Filter>Game\Shader</Filter>
     </None>
+    <None Include="Game\Model\Model.hlsli">
+      <Filter>Game\Model</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Game\Shader\InstanceModelPS.hlsl">
@@ -166,6 +178,12 @@
     </FxCompile>
     <FxCompile Include="Game\Shader\InstanceModelVS.hlsl">
       <Filter>Game\Shader</Filter>
+    </FxCompile>
+    <FxCompile Include="Game\Model\ModelPS.hlsl">
+      <Filter>Game\Model</Filter>
+    </FxCompile>
+    <FxCompile Include="Game\Model\ModelVS.hlsl">
+      <Filter>Game\Model</Filter>
     </FxCompile>
   </ItemGroup>
 </Project>
