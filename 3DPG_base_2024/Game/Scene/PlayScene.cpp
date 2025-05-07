@@ -17,7 +17,7 @@ using namespace DirectX;
 using namespace DirectX::SimpleMath;
 
 
-constexpr int THREAD_COUNT = 8;
+constexpr int THREAD_COUNT = 2;
 
 
 //---------------------------------------------------------
@@ -129,7 +129,7 @@ void PlayScene::Initialize(CommonResources* resources)
 	m_shaderSet.inputLayout = ShaderManager::CreateInputLayout(device, MODEL_INPUT_LAYOUT, "ModelVS.cso");
 	m_shaderSet.cBuffer = ShaderManager::CreateConstantBuffer<CBuff>(device);
 	
-	int SIZE = 10000;
+	int SIZE = 3000;
 	// グリッドの大きさを計算（正方形に近い形に配置）
 	int gridSize = static_cast<int>(ceil(sqrt(static_cast<float>(SIZE))));
 	// モデル間の距離
@@ -215,6 +215,8 @@ void PlayScene::Render()
 	}
 	m_frameStartCV.notify_all();  // すべてのスレッドに通知
 
+
+
 	// 全てのワーカースレッドが完了するのを待つ
 	{
 		std::unique_lock<std::mutex> lock(m_frameMutex);
@@ -226,10 +228,10 @@ void PlayScene::Render()
 		m_frameReady = false;  // フレーム処理完了をマーク
 	}
 	
-	/*for (auto& world : m_worlds)
-	{
-		m_model->Draw(context, *states, world, view, m_projection);
-	}*/
+	//for (auto& world : m_worlds)
+	//{
+	//	m_model->Draw(context, *states, world, view, m_projection);
+	//}
 }
 
 //---------------------------------------------------------
@@ -325,18 +327,6 @@ void PlayScene::ThradWork(int thradindex)
 		for (size_t i = startIndex; i < endIndex; i++)
 		{
 			m_models[i]->Render(m_deferradContext[thradindex], states, view, m_projection);
-			//Matrix world;
-			//Matrix view;
-			//Matrix projection;
-			//{
-			//	std::lock_guard<std::mutex> lock(m_draw);
-			//	// 変換行列はコピーして使用
-			//	world = m_worlds[i];
-			//	
-			//	projection = m_projection;
-			//}
-		
-			//m_model->Draw(m_deferradContext[thradindex], *states, world, view, m_projection);
 		}
 
 		// コマンドリストを生成
