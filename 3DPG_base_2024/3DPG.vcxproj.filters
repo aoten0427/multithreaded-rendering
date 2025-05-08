@@ -47,6 +47,9 @@
     <Filter Include="Game\Model">
       <UniqueIdentifier>{a1669a39-4c8e-411a-b0dc-7bd78e3f4491}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Game\MultiThread">
+      <UniqueIdentifier>{81cfd118-98ae-49f8-bf83-aa69ea444bcd}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
@@ -105,6 +108,9 @@
     <ClInclude Include="Game\Model\Model3D.h">
       <Filter>Game\Model</Filter>
     </ClInclude>
+    <ClInclude Include="Game\MultiThread\MultiThreadRendering.h">
+      <Filter>Game\MultiThread</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp" />
@@ -148,6 +154,9 @@
     </ClCompile>
     <ClCompile Include="Game\Model\Model3D.cpp">
       <Filter>Game\Model</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\MultiThread\MultiThreadRendering.cpp">
+      <Filter>Game\MultiThread</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

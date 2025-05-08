@@ -156,6 +156,7 @@ void Instancing::Render(ID3D11DeviceContext* context, DirectX::DX11::CommonState
 	}
 }
 
+
 void Instancing::Render(ID3D11DeviceContext* context, DirectX::DX11::CommonStates* states, const DirectX::SimpleMath::Matrix& view, const DirectX::SimpleMath::Matrix& projection)
 {
 	using namespace DirectX::SimpleMath;

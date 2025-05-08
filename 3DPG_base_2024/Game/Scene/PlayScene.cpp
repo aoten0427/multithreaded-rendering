@@ -17,7 +17,7 @@ using namespace DirectX;
 using namespace DirectX::SimpleMath;
 
 
-constexpr int THREAD_COUNT = 2;
+constexpr int THREAD_COUNT = 6;
 
 
 //---------------------------------------------------------
